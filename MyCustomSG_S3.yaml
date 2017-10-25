@@ -1,0 +1,111 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  VPCtoDeploy:
+    Type: "AWS::EC2::VPC::Id"
+    Description: Select VPC where to deploy
+
+Resources:
+    S3AppBucket:
+      DeletionPolicy: Retain
+      Type: "AWS::S3::Bucket"
+      Properties:
+        AccessControl: PublicRead
+        WebsiteConfiguration:
+          ErrorDocument: index.html
+          IndexDocument: index.html
+    BucketPolicyApp:
+      Type: "AWS::S3::BucketPolicy"
+      Properties:
+        Bucket: !Ref S3AppBucket
+        PolicyDocument:
+          Statement:
+            -
+              Sid: "ABC123"
+              Action:
+                - "s3:GetObject"
+              Effect: Allow
+              Resource: !Join ["", ["arn:aws:s3:::", !Ref S3AppBucket, "/*"]]
+              Principal:
+                AWS:
+                  - "*"
+    PublicWebSG:
+      Type: "AWS::EC2::SecurityGroup"
+      Properties:
+        GroupDescription: "Enable http/https access from anywhere and SSH access from anywhere"
+        #VpcId: !ImportValue shared-infrastructure-vpcid
+        VpcId: !Ref VPCtoDeploy
+        SecurityGroupIngress:
+          -
+            CidrIp: 0.0.0.0/0
+            IpProtocol: tcp
+            ToPort: "80"
+            FromPort: "80"
+          -
+            CidrIp: 0.0.0.0/0
+            IpProtocol: tcp
+            ToPort: "443"
+            FromPort: "443"
+          -
+            CidrIp: 0.0.0.0/0
+            IpProtocol: tcp
+            ToPort: "22"
+            FromPort: "22"
+        SecurityGroupEgress:
+          -
+            CidrIp: 0.0.0.0/0
+            ToPort: "-1"
+            IpProtocol: "-1"
+        Tags:
+          - Key: Name
+            Value: PublicWebSG
+    PrivateAppSG:
+      Type: "AWS::EC2::SecurityGroup"
+      Properties:
+        GroupDescription: "Enable http/https access from anywhere and SSH access from anywhere"
+        #VpcId: !ImportValue shared-infrastructure-vpcid
+        VpcId: !Ref VPCtoDeploy
+        SecurityGroupIngress:
+          -
+            CidrIp: !ImportValue public-shared-a-cidr
+            IpProtocol: tcp
+            FromPort: "22"
+            ToPort: "22"
+          -
+            CidrIp: !ImportValue public-shared-a-cidr
+            IpProtocol: icmp
+            FromPort: "8"
+            ToPort: "-1"
+          -
+            CidrIp: !ImportValue public-shared-b-cidr
+            IpProtocol: tcp
+            FromPort: "22"
+            ToPort: "22"
+          -
+            CidrIp: !ImportValue public-shared-b-cidr
+            IpProtocol: icmp
+            FromPort: "8"
+            ToPort: "-1"
+        SecurityGroupEgress:
+          -
+            CidrIp: 0.0.0.0/0
+            ToPort: "-1"
+            IpProtocol: "-1"
+        Tags:
+          - Key: Name
+            Value: PrivateAppSG
+Outputs:
+  appbucketurl:
+    Description: Shared Infrastructure App Bucket
+    Value: !GetAtt S3AppBucket.WebsiteURL
+    Export: # added to export
+      Name: sharedinf-app-bucket-url
+  publicwebsg:
+    Description: ID of Public Web SG
+    Value: !Ref PublicWebSG
+    Export: # added to export
+      Name: public-web-sg
+  privatewebsg:
+    Description: ID of private Web SG
+    Value: !Ref PrivateAppSG
+    Export: # added to export
+      Name: private-web-sg
